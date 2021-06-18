@@ -32,10 +32,10 @@ const int SIMULATION_WIDTH = 256;
 const int SIMULATION_HEIGHT = 256;
 const int PADDING = 2;
 
-const float SPEED = 1;
+const float SPEED = 0.5;
 const float FREQ = 2;
 const float AMPLITUDE = 2;
-float DAMPING = 0.25;
+float DAMPING = 0.05;
 
 Shader* waveShader;
 Shader* lightShader;
@@ -83,7 +83,7 @@ void initializeSimulationData() {
     simData.camPos[1] = 5.0;
     simData.camPos[2] = 10.0; 
 
-    float lightPos[3] = {0, 5.0f, 0};
+    float lightPos[3] = {0, 5.0f, 4.0};
     memcpy((void*) simData.lightPos, (void*)lightPos, 3 * sizeof(float));
 
 }
@@ -149,6 +149,11 @@ void framebuffer_size_callback(GLFWwindow* window, int width, int height) {
     WINDOW_WIDTH = width;
     WINDOW_HEIGHT = height;
 }
+void framebuffer_size_callback_imgui(GLFWwindow* window, int width, int height) {
+    glfwMakeContextCurrent(window);
+    ImGui::SetNextWindowPos(ImVec2(0,0));
+    ImGui::SetNextWindowSize(ImVec2(width, height));
+}
 
 double difference_in_sec(struct timespec* start, struct timespec* end) {
     double diff_in_seconds = ((double)end->tv_sec + 1.0e-9 * end->tv_nsec) - ((double) start->tv_sec + 1.0e-9 * start->tv_nsec);
@@ -156,31 +161,9 @@ double difference_in_sec(struct timespec* start, struct timespec* end) {
 }
 
 void update(double time) {
-    simData.lightPos[0] = 4 * sin(time * 0.5);
-    simData.lightPos[2] = 4 * cos(time * 0.5);
 }
 
-void renderImGuiWindow(GLFWwindow* window) {
-    glfwMakeContextCurrent(window);
-    glClearColor(1.0, 1.0, 1.0, 1.0f);
-    //glClear(GL_COLOR_BUFFER_BIT);
-    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-
-    ImGui_ImplOpenGL3_NewFrame();
-    ImGui_ImplGlfw_NewFrame();
-    ImGui::NewFrame();
-
-    ImGui::Begin("Demo Window");
-    ImGui::Button("Hello!");
-    ImGui::End();
-
-    ImGui::Render();
-    ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
-    glfwSwapBuffers(window);
-
-}
-
-void mainloop(GLFWwindow* window, GLFWwindow* window2) {
+void mainloop(GLFWwindow* window) {
     // The main render loop
     struct timespec clock;
     clock_gettime(CLOCK_MONOTONIC, &clock);
@@ -189,10 +172,9 @@ void mainloop(GLFWwindow* window, GLFWwindow* window2) {
     double prevTime = (double) clock.tv_sec + 1.0e-9 * clock.tv_nsec;
     double deltaTime, time;
 
-    while(!glfwWindowShouldClose(window) || !glfwWindowShouldClose(window2)) {
+    while(!glfwWindowShouldClose(window)) {
         glfwPollEvents();
         processInput(window);
-        renderImGuiWindow(window2);
 
         glfwMakeContextCurrent(window);
 
@@ -201,7 +183,7 @@ void mainloop(GLFWwindow* window, GLFWwindow* window2) {
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
 
-        for (int i = 0; i < 2; i++){
+        for (int i = 0; i < 1; i++){
             // Compute Shader
             clock_gettime(CLOCK_MONOTONIC, &clock);
             time = (double) clock.tv_sec + 1.0e-9 * clock.tv_nsec;
@@ -329,18 +311,7 @@ int main() {
         return -1;
     }
 
-    GLFWwindow* window2 = glfwCreateWindow(600, 600, "Controls", NULL, NULL);
-    glfwMakeContextCurrent(window2);
 
-    IMGUI_CHECKVERSION();
-    ImGui::CreateContext();
-    ImGuiIO& io = ImGui::GetIO(); (void)io;
-    io.WantCaptureMouse = true;
-    ImGui::StyleColorsDark();
-    ImGui_ImplGlfw_InitForOpenGL(window2, true);
-    ImGui_ImplOpenGL3_Init("#version 460");
-
-    glfwMakeContextCurrent(window);
     glViewport(0, 0, 800, 600);
     glEnable(GL_DEPTH_TEST);
     glEnable(GL_MULTISAMPLE);
@@ -601,7 +572,7 @@ int main() {
     clock_gettime(CLOCK_MONOTONIC, &start);
 
     // Start the mainloop
-    mainloop(window, window2);
+    mainloop(window);
 
     clock_gettime(CLOCK_MONOTONIC, &end);
     double diff_in_seconds = ((double)end.tv_sec + 1.0e-9 * end.tv_nsec) - ((double) start.tv_sec + 1.0e-9 * start.tv_nsec);
