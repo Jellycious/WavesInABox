@@ -8,11 +8,6 @@
 #define STB_IMAGE_IMPLEMENTATION
 #include <stb/stb_image.h>
 
-#define IMGUI_IMPL_OPENGL_LOADER_GLAD
-#include "imgui/imgui.h"
-#include "imgui/imgui_impl_glfw.h"
-#include "imgui/imgui_impl_opengl3.h"
-
 // STANDARD LIBRARIES
 #include <math.h>
 #include <time.h>
@@ -32,10 +27,10 @@ const int SIMULATION_WIDTH = 256;
 const int SIMULATION_HEIGHT = 256;
 const int PADDING = 2;
 
-const float SPEED = 0.5;
-const float FREQ = 2;
+const float SPEED = 0.1;
+const float FREQ = 1.5;
 const float AMPLITUDE = 2;
-float DAMPING = 0.05;
+float DAMPING = 0.02;
 
 Shader* waveShader;
 Shader* lightShader;
@@ -61,6 +56,11 @@ struct SimulationData {
     Source* sources[MAX_SOURCES];
     int src_counter;
     float camPos[3];
+    float perspectives[2][3] = {
+        {0.0, 5.0, 10.0},
+        {0.0, 6.5, 0.1}
+    };
+    int cur_perspective_idx = 0;
     float lightPos[3];
 } simData;
 
@@ -70,11 +70,12 @@ struct InputState {
     bool prev_left_mouse;
 } inputState;
 
-void render(GLFWwindow* window, double time);
+void render(double time);
 
 void initializeSimulationData() {
     for (int i = 0; i < MAX_SOURCES; i++) {
         Source* s = new Source(-1, -1, AMPLITUDE, FREQ);
+        s->setInactive();
         simData.sources[i] = s;
     }
 
@@ -86,6 +87,12 @@ void initializeSimulationData() {
     float lightPos[3] = {0, 5.0f, 4.0};
     memcpy((void*) simData.lightPos, (void*)lightPos, 3 * sizeof(float));
 
+}
+
+void setNewCamPos(float* pos) {
+    simData.camPos[0] = pos[0];
+    simData.camPos[1] = pos[1];
+    simData.camPos[2] = pos[2];
 }
 
 void processInput(GLFWwindow* window) {
@@ -101,7 +108,7 @@ void processInput(GLFWwindow* window) {
         int y = (int) (ypos * ((double) SIMULATION_HEIGHT / (double) WINDOW_HEIGHT));
         simData.sources[simData.src_counter]->setPos(x, SIMULATION_HEIGHT - y);
         simData.sources[simData.src_counter]->setPhase(0.0);
-        simData.sources[simData.src_counter]->setActive(AMPLITUDE);
+        simData.sources[simData.src_counter]->setActive();
         std::cout << "Added source at index: " << simData.src_counter << std::endl;
         simData.src_counter = (simData.src_counter + 1) % MAX_SOURCES;
     }
@@ -138,9 +145,11 @@ void processInput(GLFWwindow* window) {
     // Damping
     if(glfwGetKey(window, GLFW_KEY_BACKSPACE) == GLFW_PRESS) {
         DAMPING = fmax(0.0, DAMPING - 0.005);
+        printf("Damping: %f\n", DAMPING);
     }
     if(glfwGetKey(window, GLFW_KEY_SPACE) == GLFW_PRESS) {
         DAMPING = DAMPING + 0.005;
+        printf("Damping: %f\n", DAMPING);
     }
 }
 
@@ -149,18 +158,170 @@ void framebuffer_size_callback(GLFWwindow* window, int width, int height) {
     WINDOW_WIDTH = width;
     WINDOW_HEIGHT = height;
 }
-void framebuffer_size_callback_imgui(GLFWwindow* window, int width, int height) {
-    glfwMakeContextCurrent(window);
-    ImGui::SetNextWindowPos(ImVec2(0,0));
-    ImGui::SetNextWindowSize(ImVec2(width, height));
-}
 
 double difference_in_sec(struct timespec* start, struct timespec* end) {
     double diff_in_seconds = ((double)end->tv_sec + 1.0e-9 * end->tv_nsec) - ((double) start->tv_sec + 1.0e-9 * start->tv_nsec);
     return diff_in_seconds;
 }
 
-void update(double time) {
+void resetSources() {
+    for (int i = 0; i < MAX_SOURCES; i++) {
+        simData.sources[i]->setInactive();
+        simData.sources[i]->setPos(-1,-1);
+        simData.sources[i]->setFreq(FREQ);
+    }
+}
+
+void animate(int frame) {
+    int ANIMATION_PERIOD = 100 * 390;
+    int f = frame % ANIMATION_PERIOD;
+    // 1 Centered source
+    if (f == 0) {
+        DAMPING = 0.02;
+        resetSources();
+    }
+    if (f < 100 * 16) {
+        int cycle_period = 100 * 4;
+        if (f % cycle_period == 1) {
+            simData.sources[0]->setActive();
+            simData.sources[0]->setPos((int) SIMULATION_WIDTH / 2.0, (int) SIMULATION_HEIGHT / 2.0);
+            simData.sources[0]->setAmplitude(2.0);
+        }
+        if (f % cycle_period == (int) cycle_period / 2.0) {
+            simData.sources[0]->setInactive();
+        }
+    }
+    // Play and damp.
+    if (f == 100 * 16) simData.sources[0]->setInactive();
+    if (f < 100 * 24) return;
+    if (f == 100 * 36) DAMPING = 0.5;
+    if (f < 100 * 44) return;
+
+    // 2 Sources
+    if (f == 100 * 44){
+        DAMPING = 0.025;
+        int offset = 50;
+        simData.sources[0]->setActive();
+        simData.sources[0]->setAmplitude(2.0);
+        simData.sources[0]->setPos((int) SIMULATION_WIDTH / 2.0 - offset, (int) SIMULATION_HEIGHT / 2.0);
+
+        simData.sources[1]->setActive();
+        simData.sources[1]->setAmplitude(2.0);
+        simData.sources[1]->setPos((int) SIMULATION_WIDTH / 2.0 + offset, (int) SIMULATION_HEIGHT / 2.0);
+        return;
+    }
+    if (f == 100 * 94) {
+        simData.sources[0]->setInactive();
+        simData.sources[1]->setInactive();
+        DAMPING = 0.25;
+        return;
+    }
+
+    if ( f < 100 * 134) return;
+    if ( f == 100 * 134) {
+        simData.sources[0]->setActive();
+        simData.sources[0]->setAmplitude(3.0);
+        simData.sources[0]->setPos(2, 2);
+
+        simData.sources[1]->setActive();
+        simData.sources[1]->setAmplitude(3.0);
+        simData.sources[1]->setPos(2, SIMULATION_HEIGHT - 3);
+
+        simData.sources[2]->setActive();
+        simData.sources[2]->setAmplitude(3.0);
+        simData.sources[2]->setPos(SIMULATION_WIDTH - 3,2);
+
+        simData.sources[3]->setActive();
+        simData.sources[3]->setAmplitude(3.0);
+        simData.sources[3]->setPos(SIMULATION_WIDTH - 3,SIMULATION_HEIGHT - 3);
+        DAMPING = 0.02;
+    }
+    if ( f == 100 * 146) {
+        resetSources();
+    }
+
+    if (f < 100 * 200) return; 
+    if ( f == 100 * 200) {
+        simData.sources[0]->setActive();
+        simData.sources[0]->setAmplitude(1.0);
+        simData.sources[0]->setFreq(0.5);
+        simData.sources[0]->setPos((int) SIMULATION_WIDTH / 2.0, (int) SIMULATION_HEIGHT / 2.0);
+    }
+
+    if ( f < 100 * 220) return;
+    if ( f == 100 * 220) {
+        simData.sources[0]->setPhase(0.0);
+        simData.sources[0]->setFreq(4.0);
+        DAMPING = 0.1;
+    }
+    if ( f < 100 * 240) return;
+    if ( f == 100 * 240) {
+        simData.sources[0]->setAmplitude(3.0);
+    }
+    if ( f < 100 * 260) return;
+    if ( f == 100 * 260) {
+        resetSources();
+        DAMPING = 0.15;
+    }
+
+    if ( f < 100 * 285) return; 
+    if ( f == 100 * 285) {
+        simData.sources[0]->setFreq(0.5);
+        simData.sources[0]->setPos((int) SIMULATION_WIDTH / 2.0, (int) SIMULATION_HEIGHT / 2.0);
+        simData.sources[0]->setAmplitude(3.0);
+        simData.sources[0]->setActive();
+    }
+
+    if (f < 100 * 305) return;
+    if (f == 100 * 305) {
+        resetSources();
+        DAMPING = 0.2;
+    }
+    if (f < 100 * 325) {
+        return;
+    }
+    if (f == 100 * 325) {
+        DAMPING = 0.0;
+        simData.sources[0]->setPos(((int) SIMULATION_WIDTH / 2.0) + 50 * cos(0.666*M_PI),((int) SIMULATION_HEIGHT / 2.0) + 50 * sin(0.666*M_PI));
+        simData.sources[0]->setActive();
+        simData.sources[0]->setAmplitude(2.0);
+        simData.sources[1]->setPos(((int) SIMULATION_WIDTH / 2.0) + 50 * cos(1.333*M_PI),((int) SIMULATION_HEIGHT / 2.0) + 50 * sin(1.333*M_PI));
+        simData.sources[1]->setActive();
+        simData.sources[1]->setAmplitude(2.0);
+        simData.sources[2]->setPos(((int) SIMULATION_WIDTH / 2.0) + 50,((int) SIMULATION_HEIGHT / 2.0));
+        simData.sources[2]->setActive();
+        simData.sources[2]->setFreq(4.0);
+        simData.sources[2]->setAmplitude(2.0);
+    }
+    if (f < 100 * 345) {
+    }
+    if (f == 100 * 345) {
+        DAMPING = 0.4;
+        resetSources();
+    }
+    if (f < 100 * 355) return;
+    if ( f == 100 * 355) {
+        DAMPING = 0.05;
+        simData.sources[0]->setPos(2, (int) SIMULATION_HEIGHT / 2.0);
+        simData.sources[0]->setActive();
+        simData.sources[0]->setAmplitude(2.0);
+        simData.sources[1]->setPos(SIMULATION_WIDTH - 2, (int) SIMULATION_HEIGHT / 2.0);
+        simData.sources[1]->setActive();
+        simData.sources[1]->setAmplitude(2.0);
+    }
+    if ( f < 100 * 380) return;
+    if ( f == 100 * 380) {
+        resetSources();
+    }
+    // change perspective
+    if (f == 100 * 385) {
+        int arr_length = (int) sizeof(simData.perspectives) / sizeof(simData.perspectives[0]);
+        int new_perspective_idx = (simData.cur_perspective_idx + 1) % arr_length;
+        setNewCamPos(simData.perspectives[new_perspective_idx]);
+        simData.cur_perspective_idx = new_perspective_idx;
+    }
+    return;
+
 }
 
 void mainloop(GLFWwindow* window) {
@@ -169,85 +330,96 @@ void mainloop(GLFWwindow* window) {
     clock_gettime(CLOCK_MONOTONIC, &clock);
 
     clock_gettime(CLOCK_MONOTONIC, &clock);
-    double prevTime = (double) clock.tv_sec + 1.0e-9 * clock.tv_nsec;
-    double deltaTime, time;
+    double time = glfwGetTime();
+    double prevTime = time;
+    double deltaTime;
+    double timeSinceStart = 0.0;
+    int frames = 384 * 100;
 
     while(!glfwWindowShouldClose(window)) {
-        glfwPollEvents();
-        processInput(window);
 
-        glfwMakeContextCurrent(window);
+        time = glfwGetTime();
 
-        glClearColor(1.0, 1.0, 1.0, 1.0f);
-        //glClear(GL_COLOR_BUFFER_BIT);
-        glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+        if (time - prevTime >= (1.0 / 100.0)) {
 
+            glfwPollEvents();
+            processInput(window);
 
-        for (int i = 0; i < 1; i++){
-            // Compute Shader
-            clock_gettime(CLOCK_MONOTONIC, &clock);
-            time = (double) clock.tv_sec + 1.0e-9 * clock.tv_nsec;
             deltaTime = time - prevTime;
             prevTime = time;
+            timeSinceStart += deltaTime;
 
-            // Initialize data for compute shader.
-            int sourcePos[MAX_SOURCES][2];
-            float phase[MAX_SOURCES];
-            float amps[MAX_SOURCES];
-            float freqs[MAX_SOURCES];
+            glfwMakeContextCurrent(window);
 
-            for (int s = 0; s < MAX_SOURCES; s++) {
-                simData.sources[s]->update(deltaTime);
-                SourcePos pos = simData.sources[s]->getPos();
-                sourcePos[s][0] = pos.x;
-                sourcePos[s][1] = pos.y;
-                phase[s] = simData.sources[s]->getPhase();
-                amps[s] = simData.sources[s]->getAmplitude();
-                freqs[s] = simData.sources[s]->getFreq();
+            glClearColor(1.0, 1.0, 1.0, 1.0f);
+            //glClear(GL_COLOR_BUFFER_BIT);
+            glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+
+
+            for (int i = 0; i < 1; i++){
+                // Compute Shader
+
+                // Initialize data for compute shader.
+                int sourcePos[MAX_SOURCES][2];
+                float phase[MAX_SOURCES];
+                float amps[MAX_SOURCES];
+                float freqs[MAX_SOURCES];
+
+                for (int s = 0; s < MAX_SOURCES; s++) {
+                    simData.sources[s]->update(deltaTime);
+                    SourcePos pos = simData.sources[s]->getPos();
+                    sourcePos[s][0] = pos.x;
+                    sourcePos[s][1] = pos.y;
+                    phase[s] = simData.sources[s]->getPhase();
+                    amps[s] = simData.sources[s]->getAmplitude();
+                    freqs[s] = simData.sources[s]->getFreq();
+                }
+
+                {
+                    computeShader->use();
+                    // Setup uniform variables, which change every iteration.
+                    computeShader->setFloat("time", time);
+                    computeShader->setFloat("delta", deltaTime);
+                    computeShader->setFloat("damping", DAMPING);
+                    // Sources uniform
+                    computeShader->setVec2iArray("sources", MAX_SOURCES, sourcePos);
+
+                    //int loc = glGetUniformLocation(computeProgram.ID, "sources");
+                    //const GLint* ptr = (const GLint*) simData.sources;
+                    //glUniform2iv(loc, MAX_SOURCES, ptr);
+                    //loc = glGetUniformLocation(computeProgram.ID, "source_phases");
+                    //if (loc < 0) {
+                    //    printf("Could not find uniform source_phases\n");
+                    //}
+                    computeShader->setFloatArray("source_phases", MAX_SOURCES, phase);
+                    computeShader->setFloatArray("source_amplitude", MAX_SOURCES, amps);
+                    computeShader->setFloatArray("source_freq", MAX_SOURCES, freqs);
+
+                    // Dispatch the shader.
+                    glDispatchCompute(SIMULATION_WIDTH, SIMULATION_HEIGHT, 1);
+                    glMemoryBarrier(GL_SHADER_IMAGE_ACCESS_BARRIER_BIT);
+
+                    prevTime = time;
+                }
+
+                // Copy Compute Shader
+                {
+                    // This switches around some values in order to have everything ready for the next compute shader pass.
+                    copyShader->use();
+                    glDispatchCompute(SIMULATION_WIDTH, SIMULATION_HEIGHT, 1);
+                    glMemoryBarrier(GL_SHADER_IMAGE_ACCESS_BARRIER_BIT);
+                }
             }
 
-            {
-                computeShader->use();
-                // Setup uniform variables, which change every iteration.
-                computeShader->setFloat("time", time);
-                computeShader->setFloat("delta", deltaTime);
-                computeShader->setFloat("damping", DAMPING);
-                // Sources uniform
-                computeShader->setVec2iArray("sources", MAX_SOURCES, sourcePos);
+            // Update
+            animate(frames);
+            printf("%f\n", deltaTime);
 
-                //int loc = glGetUniformLocation(computeProgram.ID, "sources");
-                //const GLint* ptr = (const GLint*) simData.sources;
-                //glUniform2iv(loc, MAX_SOURCES, ptr);
-                //loc = glGetUniformLocation(computeProgram.ID, "source_phases");
-                //if (loc < 0) {
-                //    printf("Could not find uniform source_phases\n");
-                //}
-                computeShader->setFloatArray("source_phases", MAX_SOURCES, phase);
-                computeShader->setFloatArray("source_amplitude", MAX_SOURCES, amps);
-                computeShader->setFloatArray("source_freq", MAX_SOURCES, freqs);
-
-                // Dispatch the shader.
-                glDispatchCompute(SIMULATION_WIDTH, SIMULATION_HEIGHT, 1);
-                glMemoryBarrier(GL_SHADER_IMAGE_ACCESS_BARRIER_BIT);
-
-                prevTime = time;
-            }
-
-            // Copy Compute Shader
-            {
-                // This switches around some values in order to have everything ready for the next compute shader pass.
-                copyShader->use();
-                glDispatchCompute(SIMULATION_WIDTH, SIMULATION_HEIGHT, 1);
-                glMemoryBarrier(GL_SHADER_IMAGE_ACCESS_BARRIER_BIT);
-            }
+            // Render
+            render(time);
+            glfwSwapBuffers(window);
+            frames++;
         }
-
-        // Update
-        update(time);
-
-        // Render
-        render(window, time);
-        glfwSwapBuffers(window);
     }
 }
 
@@ -262,7 +434,7 @@ void renderLightSource() {
     glDrawArrays(GL_TRIANGLES, 0, 36);
 }
 
-void render(GLFWwindow* window, double time) {
+void render(double time) {
         waveShader->use();
 
         glm::vec3 eye = glm::vec3(simData.camPos[0], simData.camPos[1], simData.camPos[2]);
@@ -279,9 +451,9 @@ void render(GLFWwindow* window, double time) {
 
         glBindVertexArray(0);
 
-        lightShader->use();
-        lightShader->setMat4("view", view);
-        renderLightSource();
+        //lightShader->use();
+        //lightShader->setMat4("view", view);
+        //renderLightSource();
 }
 
 
@@ -295,7 +467,7 @@ int main() {
     glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
     glfwWindowHint(GLFW_SAMPLES, 4);
     glfwWindowHint(GLFW_DEPTH_BITS, 32);
-    //glfwWindowHint(GLFW_REFRESH_RATE, 60);
+    glfwWindowHint(GLFW_REFRESH_RATE, 60);
 
     GLFWwindow* window = glfwCreateWindow(WINDOW_WIDTH, WINDOW_HEIGHT, "LearnOpenGl", NULL, NULL);
     if (window == NULL) {
@@ -314,7 +486,8 @@ int main() {
 
     glViewport(0, 0, 800, 600);
     glEnable(GL_DEPTH_TEST);
-    glEnable(GL_MULTISAMPLE);
+    glEnable(GL_CULL_FACE);
+    glCullFace(GL_FRONT);
     glDepthMask(GL_TRUE);
     glDepthFunc(GL_LESS);
 
@@ -323,18 +496,6 @@ int main() {
 
 
     // Set up vertex data and configure attributes
-    float vertices[] = {
-        1, 1, 0.0f, 1, 0, // top right
-        1, -1, 0.0f, 1, 1, // bottom right
-        -1, -1, 0.0f, 0, 1, // bottom left
-        -1, 1, 0.0f, 0, 0 // top left
-    };
-
-    unsigned int indices[] = {
-        0, 1, 3,
-        1, 2, 3
-    };
-
     float cubeVertices[] = {
         -0.5f, -0.5f, -0.5f,
          0.5f, -0.5f, -0.5f,
@@ -433,6 +594,8 @@ int main() {
     s.setInt("texture2", 1);
     s.setInt("normals", 2);
     s.setInt("colorPalette", 3);
+    s.setVec3("col1", glm::vec3(120,197,220));
+    s.setVec3("col2", glm::vec3(183,236,234));
 
     // Transformation matrices for the plane
     glm::mat4 view = glm::mat4(1.0f);
@@ -446,7 +609,7 @@ int main() {
     s.setMat4("projection", projection);
 
     s.setVec2i("SIM_SIZE", SIMULATION_WIDTH, SIMULATION_HEIGHT);
-    s.setVec3("lightColor", 1.0f, 1.0f, 1.0f);
+    s.setVec3("lightColor", 242.0 / 255.0, 218.0 / 255.0, 200.0 / 255.0);
 
     printf("Created RenderProgram\n");
     // create compute shader
@@ -567,6 +730,7 @@ int main() {
     glObjects.tex_w = tex_w;
     glObjects.tex_h = tex_h;
     glObjects.textures = tex_output;
+
 
     struct timespec start={0,0}, end={0,0};
     clock_gettime(CLOCK_MONOTONIC, &start);

@@ -2,7 +2,7 @@
 
 #ifndef SOURCE_H
 #define SOURCE_H
-#define SOURCE_SHRINK_FACTOR 2.0
+#define SOURCE_AMP_RESPONSE_RATE 2.0 // Determines the speed at which the amplitude can change
 
 struct SourcePos {
     int x, y;   
@@ -10,7 +10,7 @@ struct SourcePos {
 
 class Source {
     int x, y;
-    float freq, amplitude, phase;
+    float freq, amplitude, phase, cur_amplitude;
     bool active;
     public:
         Source(int x, int y, float amplitude, float freq) {
@@ -24,20 +24,21 @@ class Source {
 
         void update(double delta) {
             phase+=delta;
-            if(!active) {
-                // decrease amplitude.
-                amplitude = std::max(0.0, amplitude - delta * SOURCE_SHRINK_FACTOR);
-            }
+            // approach desired amplitude
+            float dAmp = amplitude - cur_amplitude; 
+            cur_amplitude += dAmp * SOURCE_AMP_RESPONSE_RATE * delta;
         }
         
         void setInactive() {
             active = false;
+            this->amplitude = 0.0;
         }
 
-        void setActive(float amplitude) {
+        void setActive() {
             active = true;
-            this->amplitude = amplitude;
+            this->phase = 0.0;
         }
+
         void setPos(int x, int y) {
             this->x = x;
             this->y = y;
@@ -52,7 +53,7 @@ class Source {
             this->phase = phase;
         }
         float getAmplitude() {
-            return amplitude;
+            return cur_amplitude;
         }
         void setAmplitude(float amp) {
             this->amplitude = amp;

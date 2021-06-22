@@ -9,7 +9,9 @@ uniform float time;
 // Lighting
 uniform vec3 lightColor;
 uniform vec3 lightPos;
-
+// Colors
+uniform vec3 col1;
+uniform vec3 col2;
 
 uniform ivec2 SIM_SIZE;
 
@@ -30,6 +32,10 @@ vec3 rgb2normalized(float r, float g, float b) {
     return vec3(r / 255.0, g / 255.0, b / 255.0);
 }
 
+vec3 rgb2normalized(vec3 c) {
+    return vec3(c.r / 255.0, c.g / 255.0, c.b / 255.0);
+}
+
 vec3 calcNormal() {
     // central difference approximation of gradient
     float EPSILON_X = 1.0 / SIM_SIZE[0];
@@ -43,7 +49,7 @@ vec3 calcNormal() {
 
 void main(){
     vec4 h = texture(texture2, TexCoord);
-    vec3 col = mix(rgb2normalized(6.0,59.0,171.0)*1.1,rgb2normalized(52.0,212.0,192.0)*1.1,h.r*2);
+    vec3 col = mix(rgb2normalized(col1)*1.2,rgb2normalized(col2)*1.2,h.r*2.5);
 
     // lighting
     vec3 n = calcNormal();
