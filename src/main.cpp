@@ -95,6 +95,12 @@ void setNewCamPos(float* pos) {
     simData.camPos[2] = pos[2];
 }
 
+void mixVec(float* v1, float* v2, float* res, float alpha, int size) {
+    for (int i = 0; i < size; i++) {
+        res[i] = v1[i] * (1 - alpha) + v2[i] * alpha;
+    }
+}
+
 void processInput(GLFWwindow* window) {
     if(glfwGetKey(window, GLFW_KEY_ESCAPE) == GLFW_PRESS) glfwSetWindowShouldClose(window, true);
     int left_mouse_button = glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_LEFT);
@@ -173,7 +179,7 @@ void resetSources() {
 }
 
 void animate(int frame) {
-    int ANIMATION_PERIOD = 100 * 390;
+    int ANIMATION_PERIOD = 100 * 395;
     int f = frame % ANIMATION_PERIOD;
     // 1 Centered source
     if (f == 0) {
@@ -312,14 +318,23 @@ void animate(int frame) {
     if ( f < 100 * 380) return;
     if ( f == 100 * 380) {
         resetSources();
+        return;
     }
     // change perspective
-    if (f == 100 * 385) {
+    if (f < 100 * 390) {
         int arr_length = (int) sizeof(simData.perspectives) / sizeof(simData.perspectives[0]);
         int new_perspective_idx = (simData.cur_perspective_idx + 1) % arr_length;
-        setNewCamPos(simData.perspectives[new_perspective_idx]);
-        simData.cur_perspective_idx = new_perspective_idx;
+        float alpha = (float) ((float) frame - 100 * 380) / (100 * 10);
+        
+        float* vec1 = simData.perspectives[simData.cur_perspective_idx];
+        float* vec2 = simData.perspectives[new_perspective_idx];
+        float newVec[3];
+        mixVec(vec1, vec2, newVec, alpha, 3);
+        setNewCamPos(newVec);
+        return;
     }
+
+    if (f == 100 * 390) simData.cur_perspective_idx = (simData.cur_perspective_idx + 1) % sizeof(simData.perspectives) / sizeof(simData.perspectives[0]);
     return;
 
 }
@@ -413,7 +428,6 @@ void mainloop(GLFWwindow* window) {
 
             // Update
             animate(frames);
-            printf("%f\n", deltaTime);
 
             // Render
             render(time);
