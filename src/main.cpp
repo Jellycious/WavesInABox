@@ -7,12 +7,16 @@
 
 #define STB_IMAGE_IMPLEMENTATION
 #include <stb/stb_image.h>
+#define STB_IMAGE_WRITE_IMPLEMENTATION
+#include <stb/stb_image_write.h>
 
 // STANDARD LIBRARIES
 #include <math.h>
 #include <time.h>
 #include <string.h>
 #include <iostream>
+#include <vector>
+#include <thread> 
 
 // MY LIBRARIES
 #include "shader.hpp"
@@ -57,10 +61,10 @@ struct SimulationData {
     int src_counter;
     float camPos[3];
     float perspectives[2][3] = {
-        {0.0, 5.0, 10.0},
+        {0.0, 5.0, 8.8},
         {0.0, 6.5, 0.1}
     };
-    int cur_perspective_idx = 0;
+    size_t cur_perspective_idx = 0;
     float lightPos[3];
 } simData;
 
@@ -68,6 +72,7 @@ struct SimulationData {
 struct InputState {
     bool prev_right_mouse;
     bool prev_left_mouse;
+    int prev_space;
 } inputState;
 
 void render(double time);
@@ -80,9 +85,9 @@ void initializeSimulationData() {
     }
 
     simData.src_counter = 0;
-    simData.camPos[0] = 0.0;
-    simData.camPos[1] = 5.0;
-    simData.camPos[2] = 10.0; 
+    simData.camPos[0] = simData.perspectives[simData.cur_perspective_idx][0];
+    simData.camPos[1] = simData.perspectives[simData.cur_perspective_idx][1];
+    simData.camPos[2] = simData.perspectives[simData.cur_perspective_idx][2];
 
     float lightPos[3] = {0, 5.0f, 4.0};
     memcpy((void*) simData.lightPos, (void*)lightPos, 3 * sizeof(float));
@@ -95,6 +100,11 @@ void setNewCamPos(float* pos) {
     simData.camPos[2] = pos[2];
 }
 
+void saveImage(int width, int height, GLsizei nrChannels, unsigned char* data, GLsizei stride) {
+    stbi_write_png("screenshot.png", width, height, nrChannels, data, stride);
+    free(data);
+}
+
 void mixVec(float* v1, float* v2, float* res, float alpha, int size) {
     for (int i = 0; i < size; i++) {
         res[i] = v1[i] * (1 - alpha) + v2[i] * alpha;
@@ -102,9 +112,15 @@ void mixVec(float* v1, float* v2, float* res, float alpha, int size) {
 }
 
 void processInput(GLFWwindow* window) {
-    if(glfwGetKey(window, GLFW_KEY_ESCAPE) == GLFW_PRESS) glfwSetWindowShouldClose(window, true);
+    
     int left_mouse_button = glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_LEFT);
     int right_mouse_button = glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_RIGHT);
+    int spacebar = glfwGetKey(window, GLFW_KEY_F) == GLFW_PRESS;
+
+
+    if(glfwGetKey(window, GLFW_KEY_ESCAPE) == GLFW_PRESS) glfwSetWindowShouldClose(window, true);
+
+
     if (inputState.prev_left_mouse == GLFW_RELEASE && left_mouse_button == GLFW_PRESS) {
         // Use has pressed the button.
         // create source
@@ -129,6 +145,26 @@ void processInput(GLFWwindow* window) {
         simData.sources[simData.src_counter]->setInactive();
     }
 
+    if (inputState.prev_space == GLFW_RELEASE && spacebar == GLFW_PRESS) {
+        // Try to save image.
+        printf("Saving Image\n");
+        int width, height;
+        glfwGetFramebufferSize(window, &width, &height);
+        GLsizei nrChannels = 3;
+        GLsizei stride = nrChannels * width;
+        stride += (stride % 4) ? (4 - stride % 4) : 0;
+        GLsizei bufferSize = stride * height;
+        unsigned char* buffer = (unsigned char*) malloc(bufferSize);
+        glPixelStorei(GL_PACK_ALIGNMENT, 4);
+        glReadBuffer(GL_FRONT);
+        glReadPixels(0,0,width,height,GL_RGB,GL_UNSIGNED_BYTE, buffer);
+        stbi_flip_vertically_on_write(true);
+
+        // Lambda for thread
+        std::thread t(saveImage, width, height, nrChannels, buffer, stride);
+        t.detach();
+    }
+
 
     const float CAMSPEED = 0.10f;
 
@@ -145,8 +181,6 @@ void processInput(GLFWwindow* window) {
         simData.camPos[1] = simData.camPos[1] + CAMSPEED;
     }
 
-    inputState.prev_right_mouse = right_mouse_button;
-    inputState.prev_left_mouse = left_mouse_button;
 
     // Damping
     if(glfwGetKey(window, GLFW_KEY_BACKSPACE) == GLFW_PRESS) {
@@ -157,6 +191,10 @@ void processInput(GLFWwindow* window) {
         DAMPING = DAMPING + 0.005;
         printf("Damping: %f\n", DAMPING);
     }
+
+    inputState.prev_right_mouse = right_mouse_button;
+    inputState.prev_left_mouse = left_mouse_button;
+    inputState.prev_space = spacebar;
 }
 
 void framebuffer_size_callback(GLFWwindow* window, int width, int height) {
@@ -179,7 +217,7 @@ void resetSources() {
 }
 
 void animate(int frame) {
-    int ANIMATION_PERIOD = 100 * 395;
+    int ANIMATION_PERIOD = 100 * 400;
     int f = frame % ANIMATION_PERIOD;
     // 1 Centered source
     if (f == 0) {
@@ -224,6 +262,7 @@ void animate(int frame) {
     }
 
     if ( f < 100 * 134) return;
+    // Four sources in the corner.
     if ( f == 100 * 134) {
         simData.sources[0]->setActive();
         simData.sources[0]->setAmplitude(3.0);
@@ -247,6 +286,7 @@ void animate(int frame) {
     }
 
     if (f < 100 * 200) return; 
+    // One slow source in center.
     if ( f == 100 * 200) {
         simData.sources[0]->setActive();
         simData.sources[0]->setAmplitude(1.0);
@@ -323,8 +363,8 @@ void animate(int frame) {
     // change perspective
     if (f < 100 * 390) {
         int arr_length = (int) sizeof(simData.perspectives) / sizeof(simData.perspectives[0]);
-        int new_perspective_idx = (simData.cur_perspective_idx + 1) % arr_length;
-        float alpha = (float) ((float) frame - 100 * 380) / (100 * 10);
+        size_t new_perspective_idx = (simData.cur_perspective_idx + 1) % arr_length;
+        float alpha = (float) ((float) f - 100 * 380) / (100 * 10);
         
         float* vec1 = simData.perspectives[simData.cur_perspective_idx];
         float* vec2 = simData.perspectives[new_perspective_idx];
@@ -334,7 +374,12 @@ void animate(int frame) {
         return;
     }
 
-    if (f == 100 * 390) simData.cur_perspective_idx = (simData.cur_perspective_idx + 1) % sizeof(simData.perspectives) / sizeof(simData.perspectives[0]);
+    if (f == 100 * 390) {
+        int arr_length = (int) sizeof(simData.perspectives) / sizeof(simData.perspectives[0]);
+        size_t newIdx = (simData.cur_perspective_idx + 1) % arr_length;
+        simData.cur_perspective_idx = newIdx;
+        return;
+    } 
     return;
 
 }
@@ -349,7 +394,7 @@ void mainloop(GLFWwindow* window) {
     double prevTime = time;
     double deltaTime;
     double timeSinceStart = 0.0;
-    int frames = 384 * 100;
+    int frames =  0 * 100;
 
     while(!glfwWindowShouldClose(window)) {
 

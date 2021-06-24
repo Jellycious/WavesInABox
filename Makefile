@@ -2,8 +2,8 @@ CPP = g++
 SRC_DIR = ./src
 TARGET_DIR = ./build
 
-CFLAGS = -I./include -I/usr/local/include -Wall -Wextra -Wno-missing-braces -g
-LDFLAGS = -L/usr/local/lib -lglfw3 -lrt -lm -ldl -lX11 -lpthread -lxcb -lXau -lXdmcp
+CFLAGS = -I./include -I/usr/local/include -Wall -Wextra -Wno-missing-braces -g -std=c++11
+LDFLAGS = -L/usr/local/lib -lglfw -lrt -lm -ldl -lX11 -lpthread -lxcb -lXau -lXdmcp
 
 OBJS = glad.o util.o
 OBJS_TARGETS = $(addprefix ${TARGET_DIR}/,${OBJS})
