@@ -25,12 +25,16 @@
 
 #define MAX_SOURCES 10 // changing this requires a change in the shader.
 
-int WINDOW_WIDTH = 1920;
-int WINDOW_HEIGHT = 1080;
+// Settings
+int WINDOW_WIDTH = 720;
+int WINDOW_HEIGHT = 720;
 const int SIMULATION_WIDTH = 256;
 const int SIMULATION_HEIGHT = 256;
 const int PADDING = 2;
+const int FPS = 60;
+const bool RECORD_VIDEO = true;
 
+// Simulation Parameters
 const float SPEED = 0.1;
 const float FREQ = 1.5;
 const float AMPLITUDE = 2;
@@ -45,6 +49,7 @@ ComputeShader* copyShader;
 bool show_demo_window = true;
 
 
+
 // OpenGL objects neccesary for rendering.
 struct GlObjects {
     unsigned int tex_w;
@@ -55,6 +60,12 @@ struct GlObjects {
     unsigned int PLANE_N; // Number of plane segments.
 } glObjects;
 
+struct VideoRecording {
+    unsigned char* memPtr;
+    unsigned long memSize; // in bytes
+    unsigned long offset;
+} VideoRecording;
+
 // Information that should be send to the shader.
 struct SimulationData {
     Source* sources[MAX_SOURCES];
@@ -64,7 +75,7 @@ struct SimulationData {
         {0.0, 5.0, 8.8},
         {0.0, 6.5, 0.1}
     };
-    size_t cur_perspective_idx = 0;
+    size_t cur_perspective_idx = 1;
     float lightPos[3];
 } simData;
 
@@ -111,6 +122,32 @@ void mixVec(float* v1, float* v2, float* res, float alpha, int size) {
     }
 }
 
+void saveFrame(GLFWwindow* window) {
+    // Saves a frame into the videorecording buffer
+
+    int width, height;
+    glfwGetFramebufferSize(window, &width, &height);
+    GLsizei nrChannels = 3;
+    GLsizei stride = nrChannels * width;
+    stride += (stride % 4) ? (4 - stride % 4) : 0;
+    GLsizei frameBufferSize = stride * height;
+    // Check whether framebuffer needs to be increased in size
+    if (frameBufferSize + VideoRecording.offset > VideoRecording.memSize) {
+        // Reallocate
+        VideoRecording.memPtr = (unsigned char*) realloc(VideoRecording.memPtr, VideoRecording.memSize + 720*720*3*FPS);
+        VideoRecording.memSize = VideoRecording.memSize + 720*720*3*FPS;
+    }
+
+    unsigned char* bufferPtr = VideoRecording.memPtr + VideoRecording.offset;
+
+    glPixelStorei(GL_PACK_ALIGNMENT, 4);
+    glReadBuffer(GL_FRONT);
+    // Read pixels and put into video recording buffer.
+    glReadPixels(0,0,width,height,GL_RGB,GL_UNSIGNED_BYTE, bufferPtr);
+    VideoRecording.offset = VideoRecording.offset + frameBufferSize;
+
+}
+
 void processInput(GLFWwindow* window) {
     
     int left_mouse_button = glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_LEFT);
@@ -154,6 +191,7 @@ void processInput(GLFWwindow* window) {
         GLsizei stride = nrChannels * width;
         stride += (stride % 4) ? (4 - stride % 4) : 0;
         GLsizei bufferSize = stride * height;
+        printf("bufferSize: %d\n", bufferSize);
         unsigned char* buffer = (unsigned char*) malloc(bufferSize);
         glPixelStorei(GL_PACK_ALIGNMENT, 4);
         glReadBuffer(GL_FRONT);
@@ -217,15 +255,15 @@ void resetSources() {
 }
 
 void animate(int frame) {
-    int ANIMATION_PERIOD = 100 * 400;
+    int ANIMATION_PERIOD = FPS * 400;
     int f = frame % ANIMATION_PERIOD;
     // 1 Centered source
     if (f == 0) {
         DAMPING = 0.02;
         resetSources();
     }
-    if (f < 100 * 16) {
-        int cycle_period = 100 * 4;
+    if (f < FPS * 16) {
+        int cycle_period = FPS * 4;
         if (f % cycle_period == 1) {
             simData.sources[0]->setActive();
             simData.sources[0]->setPos((int) SIMULATION_WIDTH / 2.0, (int) SIMULATION_HEIGHT / 2.0);
@@ -236,13 +274,13 @@ void animate(int frame) {
         }
     }
     // Play and damp.
-    if (f == 100 * 16) simData.sources[0]->setInactive();
-    if (f < 100 * 24) return;
-    if (f == 100 * 36) DAMPING = 0.5;
-    if (f < 100 * 44) return;
+    if (f == FPS * 16) simData.sources[0]->setInactive();
+    if (f < FPS * 24) return;
+    if (f == FPS * 36) DAMPING = 0.5;
+    if (f < FPS * 44) return;
 
     // 2 Sources
-    if (f == 100 * 44){
+    if (f == FPS * 44){
         DAMPING = 0.025;
         int offset = 50;
         simData.sources[0]->setActive();
@@ -254,16 +292,16 @@ void animate(int frame) {
         simData.sources[1]->setPos((int) SIMULATION_WIDTH / 2.0 + offset, (int) SIMULATION_HEIGHT / 2.0);
         return;
     }
-    if (f == 100 * 94) {
+    if (f == FPS * 94) {
         simData.sources[0]->setInactive();
         simData.sources[1]->setInactive();
         DAMPING = 0.25;
         return;
     }
 
-    if ( f < 100 * 134) return;
+    if ( f < FPS * 134) return;
     // Four sources in the corner.
-    if ( f == 100 * 134) {
+    if ( f == FPS * 134) {
         simData.sources[0]->setActive();
         simData.sources[0]->setAmplitude(3.0);
         simData.sources[0]->setPos(2, 2);
@@ -281,52 +319,52 @@ void animate(int frame) {
         simData.sources[3]->setPos(SIMULATION_WIDTH - 3,SIMULATION_HEIGHT - 3);
         DAMPING = 0.02;
     }
-    if ( f == 100 * 146) {
+    if ( f == FPS * 146) {
         resetSources();
     }
 
-    if (f < 100 * 200) return; 
+    if (f < FPS * 200) return; 
     // One slow source in center.
-    if ( f == 100 * 200) {
+    if ( f == FPS * 200) {
         simData.sources[0]->setActive();
         simData.sources[0]->setAmplitude(1.0);
         simData.sources[0]->setFreq(0.5);
         simData.sources[0]->setPos((int) SIMULATION_WIDTH / 2.0, (int) SIMULATION_HEIGHT / 2.0);
     }
 
-    if ( f < 100 * 220) return;
-    if ( f == 100 * 220) {
+    if ( f < FPS * 220) return;
+    if ( f == FPS * 220) {
         simData.sources[0]->setPhase(0.0);
         simData.sources[0]->setFreq(4.0);
         DAMPING = 0.1;
     }
-    if ( f < 100 * 240) return;
-    if ( f == 100 * 240) {
+    if ( f < FPS * 240) return;
+    if ( f == FPS * 240) {
         simData.sources[0]->setAmplitude(3.0);
     }
-    if ( f < 100 * 260) return;
-    if ( f == 100 * 260) {
+    if ( f < FPS * 260) return;
+    if ( f == FPS * 260) {
         resetSources();
         DAMPING = 0.15;
     }
 
-    if ( f < 100 * 285) return; 
-    if ( f == 100 * 285) {
+    if ( f < FPS * 285) return; 
+    if ( f == FPS * 285) {
         simData.sources[0]->setFreq(0.5);
         simData.sources[0]->setPos((int) SIMULATION_WIDTH / 2.0, (int) SIMULATION_HEIGHT / 2.0);
         simData.sources[0]->setAmplitude(3.0);
         simData.sources[0]->setActive();
     }
 
-    if (f < 100 * 305) return;
-    if (f == 100 * 305) {
+    if (f < FPS * 305) return;
+    if (f == FPS * 305) {
         resetSources();
         DAMPING = 0.2;
     }
-    if (f < 100 * 325) {
+    if (f < FPS * 325) {
         return;
     }
-    if (f == 100 * 325) {
+    if (f == FPS * 325) {
         DAMPING = 0.0;
         simData.sources[0]->setPos(((int) SIMULATION_WIDTH / 2.0) + 50 * cos(0.666*M_PI),((int) SIMULATION_HEIGHT / 2.0) + 50 * sin(0.666*M_PI));
         simData.sources[0]->setActive();
@@ -339,14 +377,14 @@ void animate(int frame) {
         simData.sources[2]->setFreq(4.0);
         simData.sources[2]->setAmplitude(2.0);
     }
-    if (f < 100 * 345) {
+    if (f < FPS * 345) {
     }
-    if (f == 100 * 345) {
+    if (f == FPS * 345) {
         DAMPING = 0.4;
         resetSources();
     }
-    if (f < 100 * 355) return;
-    if ( f == 100 * 355) {
+    if (f < FPS * 355) return;
+    if ( f == FPS * 355) {
         DAMPING = 0.05;
         simData.sources[0]->setPos(2, (int) SIMULATION_HEIGHT / 2.0);
         simData.sources[0]->setActive();
@@ -355,16 +393,16 @@ void animate(int frame) {
         simData.sources[1]->setActive();
         simData.sources[1]->setAmplitude(2.0);
     }
-    if ( f < 100 * 380) return;
-    if ( f == 100 * 380) {
+    if ( f < FPS * 380) return;
+    if ( f == FPS * 380) {
         resetSources();
         return;
     }
     // change perspective
-    if (f < 100 * 390) {
+    if (f < FPS * 390) {
         int arr_length = (int) sizeof(simData.perspectives) / sizeof(simData.perspectives[0]);
         size_t new_perspective_idx = (simData.cur_perspective_idx + 1) % arr_length;
-        float alpha = (float) ((float) f - 100 * 380) / (100 * 10);
+        float alpha = (float) ((float) f - FPS * 380) / (FPS * 10);
         
         float* vec1 = simData.perspectives[simData.cur_perspective_idx];
         float* vec2 = simData.perspectives[new_perspective_idx];
@@ -374,7 +412,7 @@ void animate(int frame) {
         return;
     }
 
-    if (f == 100 * 390) {
+    if (f == FPS * 390) {
         int arr_length = (int) sizeof(simData.perspectives) / sizeof(simData.perspectives[0]);
         size_t newIdx = (simData.cur_perspective_idx + 1) % arr_length;
         simData.cur_perspective_idx = newIdx;
@@ -394,13 +432,14 @@ void mainloop(GLFWwindow* window) {
     double prevTime = time;
     double deltaTime;
     double timeSinceStart = 0.0;
-    int frames =  0 * 100;
+    int frames =  134 * FPS;
+    int recordingFrames = 0;
 
     while(!glfwWindowShouldClose(window)) {
 
         time = glfwGetTime();
 
-        if (time - prevTime >= (1.0 / 100.0)) {
+        if (time - prevTime >= (1.0 / (float) FPS)) {
 
             glfwPollEvents();
             processInput(window);
@@ -478,8 +517,23 @@ void mainloop(GLFWwindow* window) {
             render(time);
             glfwSwapBuffers(window);
             frames++;
+            recordingFrames++;
+
+            // Save frame
+            if (RECORD_VIDEO) saveFrame(window);
         }
     }
+
+    if (RECORD_VIDEO) {
+        // Write videorecording buffer to file
+        FILE* fd = fopen("videorecording.raw", "w");
+        if (fd == NULL) {
+            printf("Could not open/create videorecording file");
+        }
+        fwrite(VideoRecording.memPtr, 1, VideoRecording.offset, fd);
+        fclose(fd);
+    }
+    
 }
 
 void renderLightSource() {
@@ -519,6 +573,13 @@ void render(double time) {
 int main() {
 
     initializeSimulationData();
+    
+    // Initialize videorecording struct
+    if (RECORD_VIDEO) {
+        VideoRecording.offset = 0;
+        VideoRecording.memPtr = (unsigned char*) malloc(720*720*3*FPS);
+        VideoRecording.memSize = 720*720*3*FPS; // First second
+    }
 
     glfwInit();
     glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 4);
@@ -543,7 +604,7 @@ int main() {
     }
 
 
-    glViewport(0, 0, 800, 600);
+    glViewport(0, 0, WINDOW_WIDTH, WINDOW_HEIGHT);
     glEnable(GL_DEPTH_TEST);
     glEnable(GL_CULL_FACE);
     glCullFace(GL_FRONT);
