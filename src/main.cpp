@@ -32,7 +32,7 @@ const int SIMULATION_WIDTH = 256;
 const int SIMULATION_HEIGHT = 256;
 const int PADDING = 2;
 const int FPS = 60;
-const bool RECORD_VIDEO = true;
+const bool RECORD_VIDEO = false;
 
 // Simulation Parameters
 const float SPEED = 0.1;
@@ -333,12 +333,14 @@ void animate(int frame) {
     }
 
     if ( f < FPS * 220) return;
+    // One quick source
     if ( f == FPS * 220) {
         simData.sources[0]->setPhase(0.0);
         simData.sources[0]->setFreq(4.0);
         DAMPING = 0.1;
     }
     if ( f < FPS * 240) return;
+    // One quick source increased amplitude
     if ( f == FPS * 240) {
         simData.sources[0]->setAmplitude(3.0);
     }
@@ -364,6 +366,7 @@ void animate(int frame) {
     if (f < FPS * 325) {
         return;
     }
+    // Different frequencies
     if (f == FPS * 325) {
         DAMPING = 0.0;
         simData.sources[0]->setPos(((int) SIMULATION_WIDTH / 2.0) + 50 * cos(0.666*M_PI),((int) SIMULATION_HEIGHT / 2.0) + 50 * sin(0.666*M_PI));
@@ -432,7 +435,7 @@ void mainloop(GLFWwindow* window) {
     double prevTime = time;
     double deltaTime;
     double timeSinceStart = 0.0;
-    int frames =  134 * FPS;
+    int frames =  44 * FPS;
     int recordingFrames = 0;
 
     while(!glfwWindowShouldClose(window)) {
