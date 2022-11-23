@@ -13,7 +13,14 @@ WavesInABox is a real-time wavefront simulator written from scratch. The simulat
 <img src="/screenshots/screenshot3.png" width=300 height=300>
 <img src="/screenshots/screenshot4.png" width=300 height=300>
 
-## Building
+## Interaction
+Move camera using \<a\> \<w\> \<s\> \<d\>.
+
+Increase/decrease Damping with \<spacebar\> / \<backspace\>
+
+Add/remove wave source  \<left mouse\> / \<right mouse\>
+
+## Building from source
 #### To build the project for ubuntu:
 1. Install depedencies
 ```
