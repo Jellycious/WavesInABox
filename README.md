@@ -13,7 +13,21 @@ WavesInABox is a real-time wavefront simulator written from scratch. The simulat
 <img src="/screenshots/screenshot3.png" width=300 height=300>
 <img src="/screenshots/screenshot4.png" width=300 height=300>
 
+## Building
+#### To build the project for ubuntu:
+1. Install depedencies
+```
+sudo apt install libglfw3-dev libgles2-mesa-dev libegl1-mesa-dev libstb-dev libglm-dev
+sudo apt install build-essential
+```
+2. Install cglm library (https://github.com/recp/cglm)
+3. Build Source Code
+```
+cd WavesInABox
+make
+```
 ## Dependencies
 - [GLFW](https://www.glfw.org/)
 - [OpenGL](https://www.opengl.org/)
 - [GLM](https://github.com/g-truc/glm)
+- [CGLM](https://github.com/recp/cglm)
