@@ -7,6 +7,7 @@ WavesInABox is an artwork that explores the border between chaos and order in a 
 
 WavesInABox is a real-time wavefront simulator written from scratch. The simulation can be viewed in 3D. The simulation uses the finite difference method to simulate the [wave equation](https://en.wikipedia.org/wiki/Wave_equation) in two dimensions. Solving the wave equation is gpu-accelerated using OpenGL compute shaders. 
 
+![]()
 <img src="/screenshots/screenshot1.png" width=300 height=300>
 <img src="/screenshots/screenshot2.png" width=300 height=300>
 <img src="/screenshots/screenshot3.png" width=300 height=300>
