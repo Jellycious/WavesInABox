@@ -2,6 +2,7 @@
 A wavefront simulator and artwork in one.
 
 ![Animation](https://github.com/Jellycious/WavesInABox/blob/main/screenshots/wavesinabox.gif)
+
 <img src="/screenshots/screenshot1.png" width=300 height=300>
 <img src="/screenshots/screenshot2.png" width=300 height=300>
 <img src="/screenshots/screenshot3.png" width=300 height=300>
